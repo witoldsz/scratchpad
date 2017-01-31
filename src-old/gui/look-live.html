@@ -16,25 +16,19 @@
 	<link href="node_modules/bootstrap/dist/css/bootstrap.min.css" rel="stylesheet">
 	<link href="node_modules/font-awesome/css/font-awesome.min.css" rel="stylesheet">
 
+  <link href="//cdnjs.cloudflare.com/ajax/libs/jstree/3.0.9/themes/default/style.min.css" rel="stylesheet"/>
+
 	<!-- Custom styles for this template -->
 	<link href="index.css" rel="stylesheet">
 </head>
 
 <body>
-	<div id="my-app"></div>
+	<div></div>
 </body>
 
 <!-- Fonts and external JS and styles are available -->
 
 <!-- Your source after making -->
-<script type="text/javascript" src="/_compile/look.elm"></script>
-
-<!-- Removes splash and starts elm app. -->
-<script type="text/javascript">
-				while (document.body.firstChild) {
-								document.body.removeChild(document.body.firstChild);
-				}
-				runElmProgram();
-</script>
-
+<script src="look.js"></script>
+<script>Elm.Main.embed(document.querySelector("div"));</script>
 </html>

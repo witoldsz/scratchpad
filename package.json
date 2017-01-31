@@ -1,0 +1,18 @@
+{
+  "name": "relocate-apps",
+  "version": "1.0.0",
+  "description": "Manage your disks space by relocating the applications without hassle.",
+  "main": "main.js",
+  "dependencies": {},
+  "devDependencies": {
+    "chai": "^3.5.0",
+    "electron": "^1.4.1",
+    "mocha": "^3.2.0"
+  },
+  "scripts": {
+    "test": "mocha tests",
+    "start": "electron ."
+  },
+  "author": "Witold Szczerba <witoldsz.dev@gmail.com>",
+  "license": "ISC"
+}
