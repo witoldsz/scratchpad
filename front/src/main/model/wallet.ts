@@ -1,3 +1,4 @@
+import { h, app } from 'hyperapp'
 import { Buffer } from 'buffer'
 import { Maybe } from 'tsmonad'
 import semux from 'semux'
@@ -6,7 +7,7 @@ import { Password } from '../lib/password'
 import { hexBytes } from '../lib/utils'
 import Key from 'semux/dist/types/lib/Key'
 
-export type WalletState = Wallet & { password: Password } | undefined
+export type WalletState = { wallet: Wallet, password: Password } | undefined
 
 export interface Wallet {
   version: number
@@ -49,15 +50,15 @@ export function validateWallet(file: string, network: string): Wallet {
 }
 
 export function validatePassword(wallet: Wallet, password: Password): WalletState {
-  const walletState: WalletState = { ...wallet, password }
+  const state = { wallet, password }
   for (let i = 0; i < wallet.accounts.length; ++i) {
     const account = wallet.accounts[i]
-    const key = getKey(walletState, i)
+    const key = getKey(state, i)
     throwIf(
       account.address.replace('0x', '') !== key.toAddressHexString().replace('0x', ''),
       'Invalid password.')
   }
-  return walletState
+  return state
 }
 
 function throwIf(cond: boolean, msg: string) {
@@ -94,7 +95,7 @@ export function createNewWallet(password: Password, network: string, privKeysHex
 }
 
 export function accounts(s: WalletState): Account[] {
-  return s ? s.accounts : []
+  return s ? s.wallet.accounts : []
 }
 
 export function addresses(s: WalletState): string[] {
@@ -102,24 +103,30 @@ export function addresses(s: WalletState): string[] {
 }
 
 export function address1st(s: WalletState): string {
-  return s && s.accounts[0]
-    ? s.accounts[0].address
-    : ''
+  return addresses(s)[0] || ''
 }
 
-export function getKey(s: WalletState, accountIdx: number): Key {
-  if (!s) {
+export function getKey(state: WalletState, accountIdx: number): Key {
+  if (!state) {
     throw new Error('no wallet')
   }
+  const { wallet, password } = state
   const privKey = decrypt({
-    salt: s.cipher.salt,
-    iv: s.cipher.iv,
-    password: s.password,
-    encryptedPrivKey: s.accounts[accountIdx].encrypted,
+    salt: wallet.cipher.salt,
+    iv: wallet.cipher.iv,
+    password: state.password,
+    encryptedPrivKey: wallet.accounts[accountIdx].encrypted,
   })
   const privKeyBytes = hexBytes(privKey)
   try {
     return semux.Key.importEncodedPrivateKey(privKeyBytes)
   } catch (err) {
     throw new Error('Invalid password.')
-  }}
+  }
+}
+
+export function walletHref(wallet: Wallet) {
+  const data = JSON.stringify(wallet, null, 2)
+  const blob = new Blob([data], { type: 'application/json' })
+  return URL.createObjectURL(blob)
+}

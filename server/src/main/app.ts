@@ -2,16 +2,20 @@ import * as express from 'express'
 import * as path from 'path'
 import * as httpProxy from 'http-proxy'
 import * as request from 'superagent'
+import * as hsts from 'hsts'
+import { settings } from './settings'
 
 const staticsPath = path.join(__dirname, '..', '..', 'front', 'dist')
 
 async function main() {
   const app = express()
+  app.use(hsts())
   app.use(express.static(staticsPath))
 
+  const { address, user, pass } = settings.semuxApiService
   const proxy = httpProxy.createProxy({
-    target: 'http://localhost:5171',
-    auth: 'user:123456',
+    target: address,
+    auth: `${user}:${pass}`,
     proxyTimeout: 5000,
   })
   const proxyMiddleware = (req, res, next) => {
@@ -34,7 +38,7 @@ async function main() {
   })
 
   const addr = await new Promise((resolve) => {
-    const server = app.listen(3333, () => resolve(server.address()))
+    const server = app.listen(3333, '127.0.0.1', () => resolve(server.address()))
   })
   console.log('server listening:', addr)
 }
