@@ -19,7 +19,7 @@
     <dependency>
       <groupId>io.vertx</groupId>
       <artifactId>vertx-core</artifactId>
-      <version>3.5.0</version>
+      <version>3.5.3</version>
     </dependency>
     <dependency>
       <groupId>io.vertx</groupId>
@@ -35,23 +35,23 @@
     <dependency>
       <groupId>io.vertx</groupId>
       <artifactId>vertx-unit</artifactId>
-      <version>3.5.0</version>
+      <version>3.5.3</version>
       <scope>test</scope>
     </dependency>
     <dependency>
       <groupId>io.vertx</groupId>
       <artifactId>vertx-web</artifactId>
-      <version>3.5.0</version>
+      <version>3.5.3</version>
     </dependency>
     <dependency>
       <groupId>io.vertx</groupId>
       <artifactId>vertx-web-api-contract</artifactId>
-      <version>3.5.0</version>
+      <version>3.5.3</version>
     </dependency>
     <dependency>
       <groupId>io.vertx</groupId>
       <artifactId>vertx-web-client</artifactId>
-      <version>3.5.0</version>
+      <version>3.5.3</version>
       <scope>test</scope>
     </dependency>
   </dependencies>
