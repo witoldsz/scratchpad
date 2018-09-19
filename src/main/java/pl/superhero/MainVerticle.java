@@ -7,11 +7,14 @@ import io.vertx.ext.web.api.contract.openapi3.OpenAPI3RouterFactory;
 import io.vertx.ext.web.Router;
 import io.vertx.core.Future;
 import static io.vertx.core.Future.future;
-import io.vertx.core.json.JsonArray;
 import io.vertx.core.json.JsonObject;
 import io.vertx.ext.mongo.MongoClient;
 import io.vertx.ext.web.api.contract.RouterFactoryOptions;
+import io.vertx.ext.web.handler.StaticHandler;
 import java.util.List;
+import pl.superhero.handlers.CreateHeroHandler;
+import pl.superhero.handlers.ListHeroesHandler;
+import pl.superhero.handlers.ShowHeroByIdHandler;
 import static java.util.Optional.ofNullable;
 
 public class MainVerticle extends AbstractVerticle {
@@ -41,25 +44,9 @@ public class MainVerticle extends AbstractVerticle {
     mongo.getCollections(mongoF.completer());
 
     mongoF
-      .compose(collections -> {
-        Future<OpenAPI3RouterFactory> routerFactoryF = future();
-        OpenAPI3RouterFactory.create(this.vertx, "superheroes.json", routerFactoryF.completer());
-        return routerFactoryF;
-      })
+      .compose(__ -> createRouterFactory())
       .compose(routerFactory -> {
-        System.out.println("routerFactory: " + routerFactory);
-
-        routerFactory.setOptions(new RouterFactoryOptions()
-          .setMountNotImplementedHandler(true)
-          .setMountValidationFailureHandler(true));
-
-        // Add routes handlers
-        routerFactory.addHandlerByOperationId("listHeroes", new pl.superhero.handlers.ListHeroesHandler());
-        routerFactory.addHandlerByOperationId("createHero", new pl.superhero.handlers.CreateHeroHandler());
-        routerFactory.addHandlerByOperationId("showHeroById", new pl.superhero.handlers.ShowHeroByIdHandler());
-
-        // Generate the router
-        Router router = routerFactory.getRouter();
+        Router router = configureRouter(routerFactory);
         server = vertx.createHttpServer(new HttpServerOptions().setPort(8080).setHost("localhost"));
         server.requestHandler(router::accept).listen();
         done.complete();
@@ -70,6 +57,28 @@ public class MainVerticle extends AbstractVerticle {
   public void stop() {
     ofNullable(server).ifPresent(HttpServer::close);
     ofNullable(mongo).ifPresent(MongoClient::close);
+  }
+
+  private Future<OpenAPI3RouterFactory> createRouterFactory() {
+    Future<OpenAPI3RouterFactory> routerFactoryF = future();
+    OpenAPI3RouterFactory.create(this.vertx, "webroot/superheroes.yaml", routerFactoryF.completer());
+    return routerFactoryF;
+  }
+
+  private Router configureRouter(OpenAPI3RouterFactory routerFactory) {
+    routerFactory.setOptions(new RouterFactoryOptions()
+      .setMountNotImplementedHandler(true)
+      .setMountValidationFailureHandler(true));
+
+    // Add routes handlers
+    routerFactory.addHandlerByOperationId("listHeroes", new ListHeroesHandler(mongo));
+    routerFactory.addHandlerByOperationId("createHero", new CreateHeroHandler(mongo));
+    routerFactory.addHandlerByOperationId("showHeroById", new ShowHeroByIdHandler(mongo));
+
+    Router router = routerFactory.getRouter();
+    router.route("/*").handler(StaticHandler.create());
+    return router;
+
   }
 
 }
