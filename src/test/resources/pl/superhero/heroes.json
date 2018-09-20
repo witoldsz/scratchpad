@@ -1,0 +1,20 @@
+{
+
+    "Iron Man": {
+      "name": "Anthony Edward \"Tony\" Stark",
+      "pseudonym": "Iron Man",
+      "publisher": "Marvel Comics",
+      "skills": ["mathematics", "physics", "chemistry", "computer science"],
+      "allies": ["Ant-Man", "Hulk", "Capitan America", "Thor"],
+      "dateOfFirstAppearance": "1963-03-01"
+    },
+    "Batman": {
+      "name": "Bruce Wayne",
+      "pseudonym": "Batman",
+      "publisher": "DC Comics",
+      "skills": ["science", "detective", "athletic"],
+      "allies": ["Gordon", "Alfred", "Robin"],
+      "dateOfFirstAppearance": "1939-03-01"
+  }
+
+}

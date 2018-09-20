@@ -15,7 +15,6 @@ public class CreateHeroHandler implements Handler<RoutingContext> {
     this.mongo = mongo;
   }
 
-
   public void handle(RoutingContext routingContext) {
     JsonObject body = routingContext.getBodyAsJson();
     String id = ofNullable(body.getString("id")).orElseGet(() -> UUID.randomUUID().toString());
@@ -26,7 +25,7 @@ public class CreateHeroHandler implements Handler<RoutingContext> {
       .put("publisher", body.getString("publisher"))
       .put("skills", body.getJsonArray("skills"))
       .put("allies", body.getJsonArray("allies"))
-      .put("dateOfFirstAppearance", body.getJsonArray("dateOfFirstAppearance")),
+      .put("dateOfFirstAppearance", body.getString("dateOfFirstAppearance")),
       r -> {
         if (r.succeeded()) {
           routingContext.response().setStatusCode(201).end();

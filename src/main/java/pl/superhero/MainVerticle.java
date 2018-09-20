@@ -19,8 +19,8 @@ import static java.util.Optional.ofNullable;
 
 public class MainVerticle extends AbstractVerticle {
 
-  HttpServer server;
-  MongoClient mongo;
+  private HttpServer server;
+  private MongoClient mongo;
 
   @Override
   public void start(Future done) {
@@ -76,7 +76,9 @@ public class MainVerticle extends AbstractVerticle {
     routerFactory.addHandlerByOperationId("showHeroById", new ShowHeroByIdHandler(mongo));
 
     Router router = routerFactory.getRouter();
-    router.route("/*").handler(StaticHandler.create());
+
+    int oneMinute = 60;
+    router.route("/*").handler(StaticHandler.create().setMaxAgeSeconds(oneMinute));
     return router;
 
   }

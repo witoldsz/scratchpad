@@ -4,16 +4,16 @@ info:
   title: Superheroes
   license:
     name: MIT
-servers:
-  - url: 'http://superhero.swagger.io/v1'
 paths:
   /heroes:
     get:
       summary: List all superheroes
       operationId: listHeroes
+      tags:
+        - superheroes
       responses:
         '200':
-          description: A paged array of superheroes
+          description: An array of superheroes
           content:
             application/json:
               schema:
@@ -29,6 +29,11 @@ paths:
       operationId: createHero
       tags:
         - superheroes
+      requestBody:
+        content:
+          'application/json':
+            schema:
+              $ref: '#/components/schemas/Hero'
       responses:
         '201':
           description: Null response
@@ -68,15 +73,30 @@ components:
   schemas:
     Hero:
       required:
-        - id
         - name
+        - pseudonym
+        - publisher
+        - skills
+        - allies
+        - dateOfFirstAppearance
       properties:
         id:
-          type: integer
-          format: int64
+          type: string
         name:
           type: string
-        tag:
+        pseudonym:
+          type: string
+        publisher:
+          type: string
+        skills:
+          type: array
+          items:
+            type: string
+        allies:
+          type: array
+          items:
+            type: string
+        dateOfFirstAppearance:
           type: string
     Heroes:
       type: array
