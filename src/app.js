@@ -32,7 +32,7 @@ run(main, drivers)
 
 function intent(domSource) {
   return {
-    newPatient: click('button.new-patient'),
+    newPatient: click('button#new-patient'),
     editPatientIdx$: click('[data-action=edit]').map((ev) => parseInt(ev.target.dataset.id)),
     changeSearchTerm$: xs.merge(
       input('#searchTerm'),
