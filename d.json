@@ -1,8 +1,0 @@
-{
-  "success": false,
-  "message": "123",
-  "result": {
-    "blockNumber": "1",
-    "type": "x"
-  }
-}
