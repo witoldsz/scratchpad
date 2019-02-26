@@ -18,12 +18,11 @@ import GHC.List
 import qualified Data.ByteString.Lazy as B
 import Network.HTTP.Conduit (simpleHttp)
 
-apiUrl = "https://semux.online/v2.1.0/"
 pageSize = 100
 
-getLastCoinbase :: String -> IO UTCTime
-getLastCoinbase delegate = do
-  account <- getRight $ getAccount delegate
+getLastCoinbase :: String -> String -> IO UTCTime
+getLastCoinbase semuxApi delegate = do
+  account <- getRight $ getAccount semuxApi delegate
   let txCount = (transactionCount . result) account
   tx <- findLastCoinbase txCount
   print tx
@@ -32,7 +31,7 @@ getLastCoinbase delegate = do
   where
   findLastCoinbase :: Int -> IO Transaction
   findLastCoinbase lastTx = do
-    response <- getRight $ getTransactions delegate txRange
+    response <- getRight $ getTransactions semuxApi delegate txRange
     let txsRev = (Data.List.reverse . result) response
     let lastCoinbase = Data.List.find (\i -> transactionType i == "COINBASE") txsRev
     solution lastCoinbase
@@ -59,15 +58,15 @@ data Account = Account
 
 instance FromJSON Account
 
-getAccount :: String -> IO (Either String (Response Account))
-getAccount addr =
+getAccount :: String -> String -> IO (Either String (Response Account))
+getAccount semuxApi addr =
   eitherDecode <$> fetchJson
   where
     fetchJson :: IO B.ByteString
     fetchJson =
       putStrLn url >> simpleHttp url
       where
-        url = apiUrl ++ "account?address=" ++ addr
+        url = semuxApi ++ "account?address=" ++ addr
 
 -- Transaction
 data Transaction = Transaction
@@ -80,8 +79,8 @@ instance FromJSON Transaction where
     <$> fmap textToUTC (v .: "timestamp")
     <*> v .: "type"
 
-getTransactions :: String -> (Int, Int) -> IO (Either String (Response [Transaction]))
-getTransactions addr (from, to) =
+getTransactions :: String -> String -> (Int, Int) -> IO (Either String (Response [Transaction]))
+getTransactions semuxApi addr (from, to) =
   eitherDecode <$> fetchJson
   where
     fetchJson :: IO B.ByteString
@@ -89,7 +88,7 @@ getTransactions addr (from, to) =
       putStrLn url >> simpleHttp url
       where
         url =
-          apiUrl ++ "account/transactions?address=" ++ addr ++ "&from=" ++ (show from) ++ "&to=" ++ (show to)
+          semuxApi ++ "account/transactions?address=" ++ addr ++ "&from=" ++ (show from) ++ "&to=" ++ (show to)
 
 -- Response
 data Response a = Response
