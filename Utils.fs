@@ -1,4 +1,4 @@
-namespace CurrencyOne.Infra
+namespace SimpleMQ
 
 module internal Utils =
     let logInfo =

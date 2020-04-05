@@ -5,9 +5,8 @@
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="Utils.fs" />
-    <Compile Include="Mq3.fs" />
-    <Compile Include="RabbitMq3.fs" />
-    <Compile Include="Scratchpad.fs" />
+    <Compile Include="SimpleMQ.fs" />
+    <Compile Include="RabbitSimpleMQ.fs" />
     <Compile Include="Program.fs" />
   </ItemGroup>
   <ItemGroup>
