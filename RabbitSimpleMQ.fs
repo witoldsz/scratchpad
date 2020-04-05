@@ -16,8 +16,8 @@ type private QueueProps =
       autoDelete: bool
       autoAck: bool }
 
-    static member Query name =
-        { name = name
+    static member Query moduleName name =
+        { name = moduleName + (if name = "" then "" else ":") + name
           exchangeName = "amq.topic"
           prefetchCount = 10
           durable = false
@@ -25,8 +25,8 @@ type private QueueProps =
           autoDelete = true
           autoAck = true }
 
-    static member Event name prefetchCount =
-        { name = name
+    static member Event moduleName name prefetchCount =
+        { name = moduleName + (if name = "" then "" else ":") + name
           exchangeName = "amq.topic"
           prefetchCount = prefetchCount
           durable = true
@@ -37,6 +37,7 @@ type private QueueProps =
 type private RabbitMQueue (conn: IConnection, p: QueueProps) =
 
     let receivingChannel = conn.CreateModel()
+    let eventConsumer = EventingBasicConsumer(receivingChannel)
 
     let mutable bindings: Binding list = List.empty
 
@@ -49,21 +50,27 @@ type private RabbitMQueue (conn: IConnection, p: QueueProps) =
             | _ -> Array.empty
 
         let routingKey = event.RoutingKey
+        let correlationId =
+            if event.BasicProperties.CorrelationId = null
+            then Guid.Empty
+            else Guid.Parse(event.BasicProperties.CorrelationId)
+
         let trace =
             Trace(
                 routingKey = routingKey,
                 replyTo = event.BasicProperties.ReplyTo,
-                correlationId = Guid.Parse(event.BasicProperties.CorrelationId),
+                correlationId = correlationId,
                 tracePoints = tracePoints)
 
         let body = Encoding.UTF8.GetString(event.Body)
+
         Async.Start (async {
             do! bindings
                 |> List.tryFind (fun b -> b.Matches routingKey)
                 |> Option.map (fun b -> b.Consumer body trace)
                 |> Option.defaultValue (async { return () })
 
-            if p.autoAck
+            if not p.autoAck
             then receivingChannel.BasicAck(deliveryTag = event.DeliveryTag, multiple = false)
         })
 
@@ -83,17 +90,15 @@ type private RabbitMQueue (conn: IConnection, p: QueueProps) =
             this :> MQueue
 
         member this.Done() =
-            let eventConsumer = EventingBasicConsumer(receivingChannel)
             eventConsumer.Received.Add onEvent
+            eventConsumer.Shutdown.Add (fun e -> Console.WriteLine(e))
             receivingChannel.BasicConsume(queue = p.name, autoAck = p.autoAck, consumer = eventConsumer) |> ignore
             logInfo "MQ: binding queue [%s] done" p.name
 
-type private RabbitSimpleMQ (moduleName: string, cf: ConnectionFactory) as this =
+type private RabbitSimpleMQ (moduleName: string, cf: ConnectionFactory) =
 
-    let mq = this :> SimpleMQ
     let conn = cf.CreateConnection()
     let publishChannel = conn.CreateModel()
-    let queries = Collections.Concurrent.ConcurrentDictionary<Guid, Body -> unit>()
 
     let queue (p: QueueProps) =
         RabbitMQueue(conn, p) :> MQueue
@@ -112,24 +117,15 @@ type private RabbitSimpleMQ (moduleName: string, cf: ConnectionFactory) as this 
         fun () -> publishChannel.BasicPublish(exchange, routingKey, props, Encoding.UTF8.GetBytes body)
         |> lock publishChannel
 
-    do
-        mq.QueryQueue(moduleName)
-            .Bind("ping", fun body trace -> async { mq.PublishResponse(trace, moduleName, "text/plain") })
-            .Bind(moduleName, fun body trace -> async {
-                return queries
-                |> DictUtil.tryRemove(trace.CorrelationId)
-                |> Option.map (fun resolve -> resolve body)
-                |> Option.defaultValue ()
-            })
-            .Done()
+    member val Queries = Collections.Concurrent.ConcurrentDictionary<Guid, Body -> unit>() with get
 
     interface SimpleMQ with
 
         member this.QueryQueue name =
-            queue (QueueProps.Query name)
+            queue (QueueProps.Query moduleName name)
 
         member this.EventQueue (name, prefetchCount) =
-            queue (QueueProps.Event name prefetchCount)
+            queue (QueueProps.Event moduleName name prefetchCount)
 
         member this.PublishEvent (oldTrace, routingKey, body, contentType) =
             let trace = oldTrace.Next()
@@ -156,7 +152,7 @@ type private RabbitSimpleMQ (moduleName: string, cf: ConnectionFactory) as this 
             Async.FromContinuations (fun (resolve, reject, _) ->
                 let timeout = async {
                     do! Async.Sleep 3000
-                    queries.TryRemove correlationId |> ignore
+                    this.Queries.TryRemove correlationId |> ignore
                     reject (TimeoutException (sprintf "routing key: %s query body: %O" routingKey body)) // TODO
                 }
                 let cts = new CancellationTokenSource()
@@ -165,10 +161,23 @@ type private RabbitSimpleMQ (moduleName: string, cf: ConnectionFactory) as this 
                     resolve result
 
                 Async.Start (timeout, cts.Token)
-                queries.TryAdd(correlationId, resolveAndCancelTimeout) |> ignore
+                this.Queries.TryAdd(correlationId, resolveAndCancelTimeout) |> ignore
             )
 
 module RabbitSimpleMQ =
 
     let connect (moduleName:string) (cf: RabbitMQ.Client.ConnectionFactory) =
-        RabbitSimpleMQ (moduleName, cf) :> SimpleMQ
+        let rmq = RabbitSimpleMQ (moduleName, cf)
+        let mq = rmq :> SimpleMQ
+        mq.QueryQueue("")
+            .Bind("ping", fun body trace -> async {
+                mq.PublishResponse(trace, moduleName, "text/plain")
+            })
+            .Bind(moduleName, fun body trace -> async {
+                return rmq.Queries
+                |> DictUtil.tryRemove(trace.CorrelationId)
+                |> Option.map (fun resolve -> resolve body)
+                |> Option.defaultValue ()
+            })
+            .Done()
+        mq

@@ -5,7 +5,7 @@ open SimpleMQ
 
 [<EntryPoint>]
 let main argv =
-    Async.RunSynchronously (async {
+    async {
         let mq = RabbitSimpleMQ.connect "my-fsharp-demo" (ConnectionFactory())
 
         let event_SayHello event (trace: Trace) = async {
@@ -22,5 +22,7 @@ let main argv =
         printfn "Publishing query…"
         let! queryResponse = mq.PublishQuery(Trace.Empty, "query.settings", """["buffer-rates"]""")
         printfn "Query response: %s" queryResponse
-    })
+    }
+    |> Async.RunSynchronously
+
     0
