@@ -5,20 +5,18 @@ open SimpleMQ
 
 [<EntryPoint>]
 let main argv =
-    async {
-        let mq = RabbitSimpleMQ.connect "my-fsharp-demo" (ConnectionFactory())
+    let mq = RabbitSimpleMQ.connect "my-fsharp-demo" (ConnectionFactory())
 
-        let event_SayHello event (trace: Trace) = async {
+    let event_sayHello =
+        "event.SayHello", (fun event trace ->
+        async {
             printfn "%A" trace
             printfn "Hello to you: %s" event
-        }
+        })
 
-        let eventsQueue = mq.EventQueue(name = "events", prefetchCount = 0)
+    mq.EventQueue(name = "events", bindings = [ event_sayHello ])
 
-        eventsQueue
-            .Bind("event.sayHello", event_SayHello)
-            .Done()
-
+    async {
         printfn "Publishing query…"
         let! queryResponse = mq.PublishQuery(Trace.Empty, "query.settings", """["buffer-rates"]""")
         printfn "Query response: %s" queryResponse

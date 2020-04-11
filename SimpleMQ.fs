@@ -2,30 +2,34 @@ namespace SimpleMQ
 
 open System
 
-type Trace internal (routingKey: string, replyTo: string, correlationId: Guid, tracePoints: Guid array) =
-    member this.RoutingKey = routingKey
-    member this.ReplyTo = replyTo
-    member this.CorrelationId = correlationId
-    member this.TracePoints = tracePoints
+type Trace =
+    { routingKey: string
+      replyTo: string
+      correlationId: Guid
+      tracePoints: Guid array }
 
-    static member Empty = Trace("", "", Guid.Empty, Array.empty)
+    static member Empty =
+        { routingKey = ""; replyTo = ""; correlationId = Guid.Empty; tracePoints = Array.empty }
 
     member internal this.Next() =
-        let newTracePoints = Array.create (tracePoints.Length + 1) (Guid.NewGuid())
-        Array.Copy(tracePoints, newTracePoints, tracePoints.Length)
-        Trace(routingKey, replyTo, correlationId, tracePoints)
+        let newTracePoints = Array.create (this.tracePoints.Length + 1) (Guid.NewGuid())
+        Array.Copy(this.tracePoints, newTracePoints, this.tracePoints.Length)
+        { routingKey = this.routingKey
+          replyTo = this.replyTo
+          correlationId = this.correlationId
+          tracePoints = newTracePoints }
 
 type Body = string
 
 type MQConsumer = Body -> Trace -> Async<unit>
 
-type MQueue =
-    abstract Bind: routingKey:string * MQConsumer -> MQueue
-    abstract Done: unit -> unit
+type MQBindingKey = string
+
+type MQBinding = MQBindingKey * MQConsumer
 
 type SimpleMQ =
-    abstract EventQueue: name:string * prefetchCount:int -> MQueue
-    abstract QueryQueue: name:string -> MQueue
+    abstract EventQueue: name:string * ?prefetchCount:int * bindings:MQBinding list -> unit
+    abstract QueryQueue: name:string * ?prefetchCount:int * bindings:MQBinding list -> unit
 
     abstract PublishQuery: Trace * routingKey:string * Body * ?contentType:string -> Async<Body>
     abstract PublishEvent: Trace * routingKey:string * Body * ?contentType:string -> Trace
@@ -35,7 +39,7 @@ type private BindingKeyPattern =
     | Exact of string
     | StartsWith of string
 
-type internal Binding(bindingKey: string, consumer: MQConsumer) =
+type internal Binding(bindingKey: MQBindingKey, consumer: MQConsumer) =
     let pattern =
         if bindingKey.EndsWith(".#")
         then StartsWith (bindingKey.Replace(".#", ""))

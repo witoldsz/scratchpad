@@ -16,10 +16,10 @@ type private QueueProps =
       autoDelete: bool
       autoAck: bool }
 
-    static member Query moduleName name =
+    static member Query moduleName name prefetchCount =
         { name = moduleName + (if name = "" then "" else ":") + name
           exchangeName = "amq.topic"
-          prefetchCount = 10
+          prefetchCount = Option.defaultValue 10 prefetchCount
           durable = false
           exclusive = true
           autoDelete = true
@@ -28,26 +28,25 @@ type private QueueProps =
     static member Event moduleName name prefetchCount =
         { name = moduleName + (if name = "" then "" else ":") + name
           exchangeName = "amq.topic"
-          prefetchCount = prefetchCount
+          prefetchCount = Option.defaultValue 1 prefetchCount
           durable = true
           exclusive = false
           autoDelete = false
           autoAck = false }
 
-type private RabbitMQueue (conn: IConnection, p: QueueProps) =
+type private RabbitSimpleMQ (moduleName: string, cf: ConnectionFactory) =
 
-    let receivingChannel = conn.CreateModel()
-    let eventConsumer = EventingBasicConsumer(receivingChannel)
+    let conn = cf.CreateConnection()
+    let publishChannel = conn.CreateModel()
 
-    let mutable bindings: Binding list = List.empty
-
-    let onEvent (event: BasicDeliverEventArgs) =
+    let onEvent (p: QueueProps) (bindings: Binding list) (receivingChannel: IModel) (event: BasicDeliverEventArgs) =
         let _, traceHeader = event.BasicProperties.Headers.TryGetValue("trace")
         let tracePoints =
             match traceHeader with
             | :? Collections.Generic.List<obj> as list ->
                 list.ConvertAll(fun it -> Guid.Parse(Encoding.UTF8.GetString(it :?> byte[]))).ToArray()
-            | _ -> Array.empty
+            | _ ->
+                Array.empty
 
         let routingKey = event.RoutingKey
         let correlationId =
@@ -56,11 +55,10 @@ type private RabbitMQueue (conn: IConnection, p: QueueProps) =
             else Guid.Parse(event.BasicProperties.CorrelationId)
 
         let trace =
-            Trace(
-                routingKey = routingKey,
-                replyTo = event.BasicProperties.ReplyTo,
-                correlationId = correlationId,
-                tracePoints = tracePoints)
+            { routingKey = routingKey
+              replyTo = event.BasicProperties.ReplyTo
+              correlationId = correlationId
+              tracePoints = tracePoints }
 
         let body = Encoding.UTF8.GetString(event.Body)
 
@@ -74,39 +72,31 @@ type private RabbitMQueue (conn: IConnection, p: QueueProps) =
             then receivingChannel.BasicAck(deliveryTag = event.DeliveryTag, multiple = false)
         })
 
-    do
+    let queue (p: QueueProps) (bindings: MQBinding list) =
         logInfo "MQ: declare queue [%s]" p.name
+        let receivingChannel = conn.CreateModel()
         receivingChannel.BasicQos(prefetchSize = 0u, prefetchCount = uint16 p.prefetchCount, ``global`` = true)
         receivingChannel.QueueDeclare
             (queue = p.name, durable = p.durable, exclusive = p.exclusive, autoDelete = p.autoDelete)
         |> ignore
 
-    interface MQueue with
+        let bindQueue (key, _) =
+            logInfo "MQ: binding queue [%s] to <%s>" p.name key
+            receivingChannel.QueueBind(p.name, p.exchangeName, key)
 
-        member this.Bind(bindingKey, consumer) =
-            logInfo "MQ: binding queue [%s] to <%s>" p.name bindingKey
-            receivingChannel.QueueBind(p.name, p.exchangeName, bindingKey)
-            bindings <- Binding(bindingKey, consumer) :: bindings
-            this :> MQueue
+        List.iter bindQueue bindings
 
-        member this.Done() =
-            eventConsumer.Received.Add onEvent
-            eventConsumer.Shutdown.Add (fun e -> Console.WriteLine(e))
-            receivingChannel.BasicConsume(queue = p.name, autoAck = p.autoAck, consumer = eventConsumer) |> ignore
-            logInfo "MQ: binding queue [%s] done" p.name
-
-type private RabbitSimpleMQ (moduleName: string, cf: ConnectionFactory) =
-
-    let conn = cf.CreateConnection()
-    let publishChannel = conn.CreateModel()
-
-    let queue (p: QueueProps) =
-        RabbitMQueue(conn, p) :> MQueue
+        let eventConsumer = EventingBasicConsumer(receivingChannel)
+        eventConsumer.Received.Add (fun b -> ())
+        eventConsumer.Received.Add (onEvent p (List.map Binding bindings) receivingChannel)
+        eventConsumer.Shutdown.Add Console.WriteLine
+        receivingChannel.BasicConsume(queue = p.name, autoAck = p.autoAck, consumer = eventConsumer) |> ignore
+        logInfo "MQ: binding queue [%s] done" p.name
 
     let createPublishProps (trace: Trace) (contentType: string option) =
         let props = publishChannel.CreateBasicProperties()
         props.Headers <- Map.ofList [
-            "trace", trace.TracePoints :> obj
+            "trace", trace.tracePoints |> Array.map (fun t -> t.ToString()) :> obj
             "publisher", moduleName :> obj
             "ts", DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss.fffZ") :> obj
         ]
@@ -114,18 +104,18 @@ type private RabbitSimpleMQ (moduleName: string, cf: ConnectionFactory) =
         props
 
     let publish exchange routingKey props (body: string) =
-        fun () -> publishChannel.BasicPublish(exchange, routingKey, props, Encoding.UTF8.GetBytes body)
-        |> lock publishChannel
+        let action () = publishChannel.BasicPublish(exchange, routingKey, props, Encoding.UTF8.GetBytes body)
+        lock publishChannel action
 
     member val Queries = Collections.Concurrent.ConcurrentDictionary<Guid, Body -> unit>() with get
 
     interface SimpleMQ with
 
-        member this.QueryQueue name =
-            queue (QueueProps.Query moduleName name)
+        member this.QueryQueue (name, prefetchCount, bindings) =
+            queue (QueueProps.Query moduleName name prefetchCount) bindings
 
-        member this.EventQueue (name, prefetchCount) =
-            queue (QueueProps.Event moduleName name prefetchCount)
+        member this.EventQueue (name, prefetchCount, bindings) =
+            queue (QueueProps.Event moduleName name prefetchCount) bindings
 
         member this.PublishEvent (oldTrace, routingKey, body, contentType) =
             let trace = oldTrace.Next()
@@ -138,8 +128,8 @@ type private RabbitSimpleMQ (moduleName: string, cf: ConnectionFactory) =
             let trace = oldTrace.Next()
             let props = createPublishProps trace contentType
             props.Persistent <- false
-            props.CorrelationId <- trace.CorrelationId.ToString()
-            publish "" trace.ReplyTo props body
+            props.CorrelationId <- trace.correlationId.ToString()
+            publish "" trace.replyTo props body
 
         member this.PublishQuery (oldTrace, routingKey, body, contentType) =
             let trace = oldTrace.Next()
@@ -169,15 +159,16 @@ module RabbitSimpleMQ =
     let connect (moduleName:string) (cf: RabbitMQ.Client.ConnectionFactory) =
         let rmq = RabbitSimpleMQ (moduleName, cf)
         let mq = rmq :> SimpleMQ
-        mq.QueryQueue("")
-            .Bind("ping", fun body trace -> async {
+        mq.QueryQueue(name = "", bindings = [
+            "ping", fun body trace -> async {
                 mq.PublishResponse(trace, moduleName, "text/plain")
-            })
-            .Bind(moduleName, fun body trace -> async {
+            }
+
+            moduleName, fun body trace -> async {
                 return rmq.Queries
-                |> DictUtil.tryRemove(trace.CorrelationId)
+                |> DictUtil.tryRemove(trace.correlationId)
                 |> Option.map (fun resolve -> resolve body)
                 |> Option.defaultValue ()
-            })
-            .Done()
+            }
+        ])
         mq

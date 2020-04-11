@@ -6,6 +6,7 @@
   <ItemGroup>
     <Compile Include="Utils.fs" />
     <Compile Include="SimpleMQ.fs" />
+    <Compile Include="FakeMQ.fs" />
     <Compile Include="RabbitSimpleMQ.fs" />
     <Compile Include="Program.fs" />
   </ItemGroup>
