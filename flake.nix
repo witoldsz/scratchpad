@@ -93,7 +93,7 @@
           zlib
           libiconv
 
-          # faster builds - see https://github.com/rtfeldman/roc/blob/trunk/BUILDING_FROM_SOURCE.md#use-lld-for-the-linker
+          # faster builds - seehttps://github.com/witoldsz/scratchpad/tree/roc-trunk/BUILDING_FROM_SOURCE.md#use-lld-for-the-linker
           llvmPkgs.lld
           debugir
           rust
